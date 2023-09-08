@@ -7,6 +7,7 @@ import datetime
 import urllib.parse
 import collections
 import errno
+import json
 
 from .utils import (
     locked_file,
@@ -49,29 +50,46 @@ mySource = MySource(
 )
 
 class ConfigHandler(object):
+    ROOT_DIR = './'
     LISTS_FILE = 'lists.txt'
     ITEMS_FILE = 'items.txt'
     FAILED_FILE = 'failed.txt'
 
     @classmethod
-    def getConfDir(self, work_dir='.'):
+    def setRootDir(self, root_dir='.'):
+        self.ROOT_DIR = os.path.abspath(root_dir)
+        print(f'[===] Config.root_dir changed to: {self.ROOT_DIR}')
+
+    @classmethod
+    def getBinDir(self, work_dir=None):
+        if not work_dir:
+            work_dir = self.ROOT_DIR
+        bin_dir = os.path.join(work_dir, 'bin')
+        if not os.path.exists(bin_dir):
+            os.makedirs(bin_dir)
+        return bin_dir
+
+    @classmethod
+    def getConfDir(self, work_dir=None):
+        if not work_dir:
+            work_dir = self.ROOT_DIR
         conf_dir = os.path.join(work_dir, 'conf')
         if not os.path.exists(conf_dir):
             os.makedirs(conf_dir)
         return conf_dir
 
     @classmethod
-    def getListsFile(self, work_dir='.'):
+    def getListsFile(self, work_dir=None):
         conf_dir = self.getConfDir(work_dir)
         return os.path.join(conf_dir, self.LISTS_FILE)
     
     @classmethod
-    def getItemsFile(self, work_dir='.'):
+    def getItemsFile(self, work_dir=None):
         conf_dir = self.getConfDir(work_dir)
         return os.path.join(conf_dir, self.ITEMS_FILE)
     
     @classmethod
-    def getFailedFile(self, work_dir='.'):
+    def getFailedFile(self, work_dir=None):
         conf_dir = self.getConfDir(work_dir)
         return os.path.join(conf_dir, self.FAILED_FILE)
     
@@ -285,9 +303,7 @@ class DownloadHandler(object):
         print(f'[==] Generating exe scripts:')
         # file_suffix = int(datetime.datetime.timestamp(datetime.datetime.utcnow()))
         file_suffix = datetime.datetime.now().strftime("%y%j-%H%M%S")
-        bin_path = os.path.join(root_path, 'bin')
-        if not os.path.exists(bin_path):
-            os.makedirs(bin_path)
+        bin_path = ConfigHandler.getBinDir()
         script_paths = []
 
         # this_file_path = os.path.abspath(__file__)
@@ -295,7 +311,7 @@ class DownloadHandler(object):
         for source in sources:
             if len(source.todo_urls) > 0:
                 param_referer = XchinaParser.parse_referer(source.url_format)
-                param_download_archive = PlaylistArchiveHandler.get_source_archive_path(ConfigHandler.getConfDir(root_path), source.sid) if not download_archive_path else download_archive_path
+                param_download_archive = PlaylistArchiveHandler.get_source_archive_path(ConfigHandler.getConfDir(), source.sid) if not download_archive_path else download_archive_path
                 script_filename = f'{script_name_prefix}_{source.sid}_{file_suffix}.sh'
                 script_path = os.path.join(bin_path, script_filename)
                 script_paths.append(script_path)
@@ -340,9 +356,9 @@ def sync_urls(urls, work_dir, recent_only=False):
     ROOT_XCHINA = 'https://xchina.co/'
     ROOT_XBBS = 'https://xbbs.me/'
 
-    lists_path = ConfigHandler.getListsFile(work_dir)
-    items_path = ConfigHandler.getItemsFile(work_dir)
-    config_dir = ConfigHandler.getConfDir(work_dir)
+    lists_path = ConfigHandler.getListsFile()
+    items_path = ConfigHandler.getItemsFile()
+    config_dir = ConfigHandler.getConfDir()
     # load urls
     LISTS_URLS = read_plain_urls(lists_path)
     ITEMS_URLS = read_plain_urls(items_path)
@@ -449,11 +465,19 @@ def scan_photos(photo_dir='./xc_p'):
         'unknown_files': [],
         'incomp_pvs': [],
         'dup_size': [],
+        'dup_id_set': [],
+        're_locate_set': [],
+        'empty_model_dir': []
     }
     fix = {
         'dup_size': [],
-        'incomp_pvs': []
+        'incomp_pvs': [],
+        'dup_id_set': [],
+        're_locate_set': [],
+        'empty_model_dir': []
     }
+    re_locate_set_prefixs = ['\u56FD\u6A21', '\u53F0\u6A21', '\u6B27\u6A21', '\u6E2F\u6A21', '\u97E9\u6A21', '\u65E5\u6A21']
+    img_set_paths = {}
     print(f'[==] Start scanning photos dir: {path}')
     models = os.listdir(path)
     # print(f'[=] Model dirs found: {len(models)}')
@@ -461,19 +485,42 @@ def scan_photos(photo_dir='./xc_p'):
         model_path = os.path.join(path, model)
         if not os.path.isdir(model_path):
             continue
+
+        re_locate_path = None
+        for prefix in re_locate_set_prefixs:
+            if model.startswith(prefix) and len(model) > len(prefix):
+                re_locate_path = os.path.join(path, prefix)
+                break
+
         img_sets = os.listdir(model_path)
         # print(f'[+] Image sets found for model: {len(img_sets)} --> {model}')
+        img_set_dir_cnt = 0
         for img_set in img_sets:
             img_set_path = os.path.join(model_path, img_set)
             if not os.path.isdir(img_set_path):
                 continue
+
+            img_set_dir_cnt += 1
             ret['img_set_paths'].append(img_set_path)
+            
+            if re_locate_path:
+                ret['re_locate_set'].append(img_set_path)
+                fix['re_locate_set'].append({
+                    'img_set': img_set,
+                    'img_set_path': img_set_path,
+                    're_locate_path': re_locate_path
+                })
+
             img_set_path_name = img_set_path[len(path)+1:]
             img_set_id = None
             img_set_ps = 0
             img_set_vs = 0
             if img_set.rfind('-') >= 0:
                 img_set_id = img_set[img_set.rfind('-')+1:]
+                isp = img_set_paths.get(img_set_id, [])
+                isp.append(img_set_path)
+                img_set_paths[img_set_id] = isp
+
                 img_set_left = img_set[:img_set.rfind('-')]
                 if img_set_left.rfind('-') >= 0:
                     vps = img_set_left[img_set_left.rfind('-')+1:]
@@ -546,31 +593,50 @@ def scan_photos(photo_dir='./xc_p'):
                             'id': img_set_id,
                             'img_set_path': img_set_path,
                         })
+
+        if img_set_dir_cnt <= 0:
+            ret['empty_model_dir'].append(model_path)
+            fix['empty_model_dir'].append(model_path)
+
+    for key, value in img_set_paths.items():
+        if len(value) > 1:
+            ret['dup_id_set'].append({
+                key: value
+            })
+        if len(value) == 2:
+            na_v = None
+            co_v = None
+            if value[0].find('/NA/') >= 0 and value[1].find['/NA/'] < 0:
+                na_v = value[0]
+                co_v = value[1]
+            elif value[1].find('/NA/') >= 0 and value[0].find('/NA/') < 0:
+                na_v = value[1]
+                co_v = value[0]
+            if na_v and co_v:
+                fix['dup_id_set'].append({
+                    'na': na_v,
+                    'co': co_v,
+                })
+
     return ret, fix
 
 def scan(dir='./'):
     path = os.path.abspath(dir)
-    # ret = {
-    #     'img_set_paths': [],
-    #     'no_id_paths': [],
-    #     'no_pvs_paths': [],
-    #     'no_files_paths': [],
-    #     'unknown_files': [],
-    #     'incomp_pvs': [],
-    # }
+
     def print_scan_ret_entry(ret, key):
         print(f'[===] print ret.{key}:')
         for line in ret[key]:
             print(line)
 
     def do_fix(work_dir, fix, key, source):
-        print(f'[===] fixing {key}:')
-        download_archive_path = os.path.join(ConfigHandler.getConfDir(work_dir), 'fix-downloaded.txt')
+        print(f'[===] fixing {key}, todo size: {len(fix[key])}')
+        file_suffix = datetime.datetime.now().strftime("%y%j-%H%M%S")
+        download_archive_path = os.path.join(ConfigHandler.getConfDir(), 'fix-downloaded.txt')
+        script_file = None
+
         if key == 'dup_size':
-            script_dir = os.path.join(work_dir, 'bin')
-            script_file = os.path.join(script_dir, 'fix-dup.sh')
+            script_file = os.path.join(ConfigHandler.getBinDir(), f'fix_dupsize_{file_suffix}.sh')
             # update: delete image files only, leave dir there for fix-missing script to fix
-            print(f'[==] to fix size:{len(fix[key])}')
             with open(script_file, 'w') as f:
                 f.write('#!/bin/bash\n\n')
                 for todo in fix[key]:
@@ -579,10 +645,7 @@ def scan(dir='./'):
                 # f.write(f'rm -f "{download_archive_path}"\n')
                 f.flush()
             # print(f'[==] Added todo urls:{len(source.todo_urls)}')
-            print(f'bash {script_file}')
-            return [script_file]
         elif key == 'incomp_pvs':
-            print(f'[==] to fix size:{len(fix[key])}')
             for todo in fix[key]:
                 url = source.url_format % todo['id']
                 query = urllib.parse.urlencode({
@@ -605,10 +668,52 @@ def scan(dir='./'):
                 os.remove(download_archive_path)
             # print(f'You may delete the archive file "conf/fix-downloaded.txt" before running the fix script.')
             return sps
+        elif key == 're_locate_set' and len(fix[key]) > 0:
+            script_file = os.path.join(ConfigHandler.getBinDir(), f'fix_relocate_{file_suffix}.sh')
+            with open(script_file, 'w') as f:
+                f.write('#!/bin/bash\n\n')
+                cnt = 0
+                total = len(fix[key])
+                for todo in fix[key]:
+                    cnt = cnt + 1
+                    if not os.path.exists(todo["re_locate_path"]):
+                        os.makedirs(todo["re_locate_path"])
+                    target_dir = os.path.join(todo["re_locate_path"], todo["img_set"])
+                    f.write(f'if [ ! -d "{target_dir}" ]; then\n')
+                    f.write(f'mv "{todo["img_set_path"]}" "{todo["re_locate_path"]}/" && echo "moved [{cnt}/{total}]" \n')
+                    f.write(f'else\n')
+                    f.write(f'echo "skipped [{cnt}/{total}], target exists: {target_dir}" \n')
+                    f.write(f'fi\n\n')
+                f.write('\n\necho "DONE" \n\n')
+                f.flush()
+        elif key == 'empty_model_dir' and len(fix[key]) > 0:
+            script_file = os.path.join(ConfigHandler.getBinDir(), f'fix_emptymodel_{file_suffix}.sh')
+            with open(script_file, 'w') as f:
+                f.write('#!/bin/bash\n\n')
+                # for todo in fix[key]:
+                #     f.write(f'rm -rf "{todo}" \n')
+                f.write(f'find "{work_dir}/{source.sid}" -type d -empty -depth 1 -delete\n\n')
+                f.flush()
+        elif key == 'dup_id_set' and len(fix[key]) > 0:
+            script_file = os.path.join(ConfigHandler.getBinDir(), f'fix_dupid_{file_suffix}.sh')
+            with open(script_file, 'w') as f:
+                f.write('#!/bin/bash\n\n')
+                for todo in fix[key]:
+                    f.write(f'mv -f "{todo["na"]}/*" "{todo["co"]}/" \n')
+                f.flush()
+
+        if script_file:
+            print(f'bash {script_file}')
+            return [script_file]
 
     print('[===] Start scan xc_p:')
     ret, fix = scan_photos(os.path.join(path, 'xc_p'))
     print('[===] Comp scan xc_p:')
+    with open(os.path.join(ConfigHandler.getConfDir(), 'scan_ret_xc_p.json'), 'w') as f:
+        json.dump(ret, f)
+    with open(os.path.join(ConfigHandler.getConfDir(), 'scan_fix_xc_p.json'), 'w') as f:
+        json.dump(fix, f)
+    print(f'[===] Scan xc_p results saved to: {ConfigHandler.getBinDir()}')
 
     print(f'Found img_sets:{len(ret["img_set_paths"])}')
     # print_scan_ret_entry(ret, 'img_set_paths')
@@ -618,21 +723,22 @@ def scan(dir='./'):
     # print_scan_ret_entry(ret, 'unknown_files')
     print_scan_ret_entry(ret, 'incomp_pvs')
     print_scan_ret_entry(ret, 'dup_size')
+    print_scan_ret_entry(ret, 'dup_id_set')
+    print_scan_ret_entry(ret, 're_locate_set')
+    print_scan_ret_entry(ret, 'empty_model_dir')
+
 
     ###
     #IMP!!!
     # do one 'fix' line one time, cause shared source instance
     ###
     # do_fix(path, fix, 'dup_size', mySource.xc_p)
-    sps = do_fix(path, fix, 'incomp_pvs', mySource.xc_p)
+    sps = []
+    for key in ['incomp_pvs', 'dup_id_set', 're_locate_set', 'empty_model_dir']:
+        ret = do_fix(path, fix, key, mySource.xc_p)
+        if ret:
+            sps.extend(ret)
 
-    # print(line for line in ret['img_set_paths'])
-    # print(line for line in ret['no_id_paths'])
-    # print(line for line in ret['no_pvs_paths'])
-    # print(line for line in ret['no_files_paths'])
-    # print(line for line in ret['unknown_files'])
-    # print(line for line in ret['incomp_pvs'])
-    # print(urllib.parse.urlparse('https://xchina.co/photo/id-adfaf.html'))
     return sps
 
 def process_input_urls(work_dir, urls=[], recent_only=False):
@@ -642,7 +748,7 @@ def process_input_urls(work_dir, urls=[], recent_only=False):
     failed_urls.extend(
         sync_urls(urls, work_dir=work_dir, recent_only=recent_only))
 
-    failed_file = ConfigHandler.getFailedFile(work_dir)
+    failed_file = ConfigHandler.getFailedFile()
     if len(failed_urls) > 0:
         write_plain_urls(failed_urls, failed_file)
     print(f'[=] Failed URLs: {len(failed_urls)} --> {failed_file}')
@@ -668,12 +774,18 @@ def real_main(argv):
     global THIS_CMD
     THIS_CMD = ' '.join(argv)
 
-    work_dir = os.path.abspath(os.environ.get('XCHINA2_WORKDIR', './'))
+    conf_dir = os.path.abspath(os.environ.get('XCHINA2_CONF_DIR', './'))
+    work_dir = os.path.abspath(os.environ.get('XCHINA2_DATA_DIR', './'))
     exe_scripts = os.environ.get('XCHINA2_EXE_SCRIPTS', None)
     youtube_dl_config = os.environ.get('XCHINA_YOUTUBE_DL_CONFIG', None)
-    print(f'[===] work_dir: {work_dir}')
-    print(f'[===] exe_scripts: {"True" if exe_scripts else "False"}')
-    print(f'[===] youtube-dl_config: {youtube_dl_config}')
+    print(f'[===] ENV:')
+    print(f'[=] conf_dir: {conf_dir}')
+    print(f'[=] data_dir: {work_dir}')
+    print(f'[=] exe_scripts: {"True" if exe_scripts else "False"}')
+    print(f'[=] youtube-dl_config: {youtube_dl_config}')
+
+    if conf_dir:
+        ConfigHandler.setRootDir(conf_dir)
 
     if youtube_dl_config:
         global DOWNLOAD_COMMON_ARG
@@ -682,12 +794,12 @@ def real_main(argv):
     sps = None
     if len(argv) > 1:
         arg = argv[1].strip()
-        print(f'[==] Parsed arg: {arg}')
+        print(f'[===] Cmd arg: {arg}')
         if arg == 'help':
-            print(f'xchina2 [ $URL | urls.txt | playlist | full | photo | scan | fix | version | help ]')
+            print(f'xchina2 [ $URL | urls.txt | playlist | full | photo | scan | version | help ]')
             exit()
         elif arg == 'version':
-            print(f'20230905') ### VERSION HERE ###
+            print(f'20230908') ### VERSION HERE ###
         elif arg.startswith("http"):
             print(f'[=] Start with input URL: {arg}')
             sps = process_input_urls(work_dir, [arg])
@@ -696,31 +808,37 @@ def real_main(argv):
             sps = process_input_files(work_dir, [arg])
         elif arg.lower() == 'playlist':
             sid = argv[2].strip() if len(argv) > 2 else None
-            PlaylistArchiveHandler.generate_playlist_archive_files(ConfigHandler.getConfDir(work_dir=work_dir), mySource, sid)
+            PlaylistArchiveHandler.generate_playlist_archive_files(ConfigHandler.getConfDir(), mySource, sid)
             print(f'[=] Done.')
             exit()
         elif arg.lower() == 'full':
-            print(f'[=] Start updating fully with default input files: {ConfigHandler.getListsFile(work_dir)}')
+            print(f'[=] Start updating fully with default input files: {ConfigHandler.getListsFile()}')
             RECENT_ONLY = False # found full sets 
             print(f'[=] Param: recent_only={RECENT_ONLY}')
-            PlaylistArchiveHandler.generate_playlist_archive_files(ConfigHandler.getConfDir(work_dir=work_dir), mySource)
-            sps = process_input_files(work_dir, [ConfigHandler.getListsFile(work_dir)], recent_only=RECENT_ONLY)
+            PlaylistArchiveHandler.generate_playlist_archive_files(ConfigHandler.getConfDir(), mySource)
+            sps = process_input_files(work_dir, [ConfigHandler.getListsFile()], recent_only=RECENT_ONLY)
         elif arg.lower() == 'photo':
             urls = ['https://xchina.co/photos/kind-1.html', 'https://xchina.co/photos/kind-2.html']
             print(f'[=] Start with default URL: {urls}')
             sps = process_input_urls(work_dir, urls, recent_only=True)
         elif arg.lower() == 'scan':
             sps = scan(work_dir)
+        elif arg.lower() == 'test':
+            print(f'[=] Start TEST')
+            print(f'Conf.0: {ConfigHandler.getConfDir()}')
+            # ConfigHandler.setRootDir('/Users/toumasakichi/Downloads/tmp')
+            print(f'Conf.1: {ConfigHandler.getConfDir()}')
+            print(f'Bin.1: {ConfigHandler.getBinDir()}')
         else:
             print(f'[X] Unsupported input arg, exit..')
             exit()
     else:
-        print(f'[==] No arg found, using default input files: {ConfigHandler.getListsFile(work_dir)}')
+        print(f'[==] No arg found, using default input files: {ConfigHandler.getListsFile()}')
         ### IMP, TODO, switch mode
         RECENT_ONLY = True #found recent set only
         print(f'[=] Param: recent_only={RECENT_ONLY}')
-        PlaylistArchiveHandler.generate_playlist_archive_files(ConfigHandler.getConfDir(work_dir=work_dir), mySource)
-        sps = process_input_files(work_dir, [ConfigHandler.getListsFile(work_dir)], recent_only=RECENT_ONLY)
+        PlaylistArchiveHandler.generate_playlist_archive_files(ConfigHandler.getConfDir(), mySource)
+        sps = process_input_files(work_dir, [ConfigHandler.getListsFile()], recent_only=RECENT_ONLY)
         #process_input_files(recent_only=False)#try to force re-sync every set & image
     
     if sps and exe_scripts:
