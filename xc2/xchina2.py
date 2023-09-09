@@ -777,8 +777,16 @@ def real_main(argv):
 
     conf_dir = os.path.abspath(os.environ.get('XCHINA2_CONF_DIR', './'))
     work_dir = os.path.abspath(os.environ.get('XCHINA2_DATA_DIR', './'))
-    exe_scripts = os.environ.get('XCHINA2_EXE_SCRIPTS', None)
+    exe_scripts = os.environ.get('XCHINA2_EXE_SCRIPTS', '0')
     youtube_dl_config = os.environ.get('XCHINA_YOUTUBE_DL_CONFIG', None)
+
+    if exe_scripts:
+        if exe_scripts == '1' or exe_scripts.lower() == 'true' or exe_scripts.lower() == 'yes':
+            exe_scripts = True
+        else:
+            exe_scripts = False
+    else:
+        exe_scripts = False
     print(f'[===] ENV:')
     print(f'[=] conf_dir: {conf_dir}')
     print(f'[=] data_dir: {work_dir}')
@@ -792,6 +800,7 @@ def real_main(argv):
         global DOWNLOAD_COMMON_ARG
         DOWNLOAD_COMMON_ARG = f' --config-location {youtube_dl_config}'
 
+
     sps = None
     if len(argv) > 1:
         arg = argv[1].strip()
@@ -800,7 +809,7 @@ def real_main(argv):
             print(f'xchina2 [ $URL | urls.txt | playlist | full | photo | scan | version | help ]')
             exit()
         elif arg == 'version':
-            print(f'20230908') ### VERSION HERE ###
+            print(f'20230909') ### VERSION HERE ###
         elif arg.startswith("http"):
             print(f'[=] Start with input URL: {arg}')
             sps = process_input_urls(work_dir, [arg])
