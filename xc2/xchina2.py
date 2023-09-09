@@ -693,7 +693,7 @@ def scan(dir='./'):
                 # for todo in fix[key]:
                 #     f.write(f'rm -rf "{todo}" \n')
                 f.write(f'find "{work_dir}/{source.sid}" -type f -name ".DS_Store" -delete\n\n')
-                f.write(f'find "{work_dir}/{source.sid}" -type d -empty -depth 1 -delete\n\n')
+                f.write(f'find "{work_dir}/{source.sid}" -mindepth 1 -maxdepth 1 -type d -empty -delete\n\n')
                 f.flush()
         elif key == 'dup_id_set' and len(fix[key]) > 0:
             script_file = os.path.join(ConfigHandler.getBinDir(), f'fix_dupid_{file_suffix}.sh')
