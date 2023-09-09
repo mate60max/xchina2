@@ -692,6 +692,7 @@ def scan(dir='./'):
                 f.write('#!/bin/bash\n\n')
                 # for todo in fix[key]:
                 #     f.write(f'rm -rf "{todo}" \n')
+                f.write(f'find "{work_dir}/{source.sid}" -type f -name ".DS_Store" -delete\n\n')
                 f.write(f'find "{work_dir}/{source.sid}" -type d -empty -depth 1 -delete\n\n')
                 f.flush()
         elif key == 'dup_id_set' and len(fix[key]) > 0:
