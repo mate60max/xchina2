@@ -16,7 +16,7 @@ from .utils import (
 )
 
 THIS_CMD = 'xchina2'
-DOWNLOAD_COMMON_ARG = None
+DOWNLOAD_COMMON_ARG = ''
 
 SourceParam = collections.namedtuple(
     'SourceParam', ['sid', 'extractor', 'output_template', 'url_format', 'todo_urls'])
@@ -774,11 +774,13 @@ def real_main(argv):
     print('=====XCHINA2=====')
     global THIS_CMD
     THIS_CMD = ' '.join(argv)
+    global DOWNLOAD_COMMON_ARG
 
     conf_dir = os.path.abspath(os.environ.get('XCHINA2_CONF_DIR', './'))
     work_dir = os.path.abspath(os.environ.get('XCHINA2_DATA_DIR', './'))
     exe_scripts = os.environ.get('XCHINA2_EXE_SCRIPTS', '0')
     youtube_dl_config = os.environ.get('XCHINA_YOUTUBE_DL_CONFIG', None)
+    proxy_setting = os.environ.get('XCHINA2_PROXY_SETTING', None)
 
     if exe_scripts:
         if exe_scripts == '1' or exe_scripts.lower() == 'true' or exe_scripts.lower() == 'yes':
@@ -792,13 +794,16 @@ def real_main(argv):
     print(f'[=] data_dir: {work_dir}')
     print(f'[=] exe_scripts: {"True" if exe_scripts else "False"}')
     print(f'[=] youtube-dl_config: {youtube_dl_config}')
+    print(f'[=] proxy_setting: {proxy_setting}')
 
     if conf_dir:
         ConfigHandler.setRootDir(conf_dir)
 
     if youtube_dl_config:
-        global DOWNLOAD_COMMON_ARG
-        DOWNLOAD_COMMON_ARG = f' --config-location {youtube_dl_config}'
+        DOWNLOAD_COMMON_ARG = DOWNLOAD_COMMON_ARG + f' --config-location {youtube_dl_config}'
+
+    if proxy_setting:
+        DOWNLOAD_COMMON_ARG = DOWNLOAD_COMMON_ARG + f' --proxy {proxy_setting}'
 
 
     sps = None
