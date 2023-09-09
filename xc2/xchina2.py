@@ -321,7 +321,7 @@ class DownloadHandler(object):
                     #sort to place 'series-' urls before 'model-' to speed up list updating
                     todo_urls = source.todo_urls
                     keys = list(todo_urls.keys())
-                    keys.sort(reverse=True)
+                    keys.sort(reverse=False)
                     # sorted_urls = {i: todo_urls[i] for i in keys}
                     for key in keys:
                         item = todo_urls[key]
