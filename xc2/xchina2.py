@@ -674,10 +674,13 @@ def scan(dir='./'):
                 f.write('#!/bin/bash\n\n')
                 cnt = 0
                 total = len(fix[key])
+                mkdirs = {}
                 for todo in fix[key]:
                     cnt = cnt + 1
-                    if not os.path.exists(todo["re_locate_path"]):
-                        os.makedirs(todo["re_locate_path"])
+                    if not todo['re_locate_path'] in mkdirs:
+                        mkdirs[todo['re_locate_path']] = True
+                        f.write(f'mkdir -p "{todo["re_locate_path"]}" \n')
+
                     target_dir = os.path.join(todo["re_locate_path"], todo["img_set"])
                     f.write(f'if [ ! -d "{target_dir}" ]; then\n')
                     f.write(f'mv "{todo["img_set_path"]}" "{todo["re_locate_path"]}/" && echo "moved [{cnt}/{total}]" \n')
@@ -702,6 +705,8 @@ def scan(dir='./'):
                 f.write('#!/bin/bash\n\n')
                 for todo in fix[key]:
                     f.write(f'mv -f "{todo["na"]}"/* "{todo["co"]}/" && rm -rf "{todo["na"]}" \n')
+                f.write(f'find "{work_dir}/{source.sid}" -type f -name ".DS_Store" -delete\n\n')
+                f.write(f'find "{work_dir}/{source.sid}" -mindepth 1 -maxdepth 1 -type d -empty -delete\n\n')
                 f.flush()
 
         if script_file:
@@ -715,7 +720,7 @@ def scan(dir='./'):
         json.dump(ret, f)
     with open(os.path.join(ConfigHandler.getConfDir(), 'scan_fix_xc_p.json'), 'w') as f:
         json.dump(fix, f)
-    print(f'[===] Scan xc_p results saved to: {ConfigHandler.getBinDir()}')
+    print(f'[===] Scan xc_p results saved to: {ConfigHandler.getConfDir()}')
 
     print(f'Found img_sets:{len(ret["img_set_paths"])}')
     # print_scan_ret_entry(ret, 'img_set_paths')
@@ -731,16 +736,31 @@ def scan(dir='./'):
 
 
     ###
-    #IMP!!!
-    # do one 'fix' line one time, cause shared source instance
-    ###
+
     # do_fix(path, fix, 'dup_size', mySource.xc_p)
+
+    ### Stage 1, about img set self
     sps = []
-    for key in ['incomp_pvs', 'dup_id_set', 're_locate_set', 'empty_model_dir']:
+    for key in ['dup_id_set', 're_locate_set', 'empty_model_dir']:
         ret = do_fix(path, fix, key, mySource.xc_p)
         if ret:
             sps.extend(ret)
+    if len(sps) > 0:
+        print(f'[===] Generated {len(sps)} fix scripts for Stage 1.')
+        print(f'[===] Before scanning Stage 2, all fixes in Stage 1 MUST be finished.')
+        return sps
 
+    ### Stage 2, about media files in img set
+    for key in ['incomp_pvs']:
+        ret = do_fix(path, fix, key, mySource.xc_p)
+        if ret:
+            sps.extend(ret)
+    if len(sps) > 0:
+        print(f'[===] Generated {len(sps)} fix scripts for Stage 2.')
+        # print(f'[===] Before scanning Stage 3, all fixes in Stage 2 MUST be finished.')
+        return sps
+
+    print(f'[===] No fix scripts generated.')
     return sps
 
 def process_input_urls(work_dir, urls=[], recent_only=False):
