@@ -606,7 +606,7 @@ def scan_photos(photo_dir='./xc_p'):
         if len(value) == 2:
             na_v = None
             co_v = None
-            if value[0].find('/NA/') >= 0 and value[1].find['/NA/'] < 0:
+            if value[0].find('/NA/') >= 0 and value[1].find('/NA/') < 0:
                 na_v = value[0]
                 co_v = value[1]
             elif value[1].find('/NA/') >= 0 and value[0].find('/NA/') < 0:
@@ -684,6 +684,7 @@ def scan(dir='./'):
                     f.write(f'else\n')
                     f.write(f'echo "skipped [{cnt}/{total}], target exists: {target_dir}" \n')
                     f.write(f'fi\n\n')
+                f.write(f'find "{work_dir}/{source.sid}" -mindepth 1 -maxdepth 1 -type d -empty -delete\n\n')
                 f.write('\n\necho "DONE" \n\n')
                 f.flush()
         elif key == 'empty_model_dir' and len(fix[key]) > 0:
@@ -700,7 +701,7 @@ def scan(dir='./'):
             with open(script_file, 'w') as f:
                 f.write('#!/bin/bash\n\n')
                 for todo in fix[key]:
-                    f.write(f'mv -f "{todo["na"]}/*" "{todo["co"]}/" \n')
+                    f.write(f'mv -f "{todo["na"]}"/* "{todo["co"]}/" && rm -rf "{todo["na"]}" \n')
                 f.flush()
 
         if script_file:
