@@ -17,6 +17,7 @@ from .utils import (
 
 THIS_CMD = 'xchina2'
 DOWNLOAD_COMMON_ARG = ''
+ABCM = 5
 
 SourceParam = collections.namedtuple(
     'SourceParam', ['sid', 'extractor', 'output_template', 'url_format', 'todo_urls'])
@@ -397,7 +398,7 @@ def sync_urls(urls, work_dir, recent_only=False):
                     todo_url = paged_urls[1] if recent_only else paged_urls[2]
                     sp_xc_p.todo_urls[todo_url] = DownloadHandler.generate_download_item(
                             f'{todo_url}?{PlaylistArchiveHandler.get_playlist_archive_urlparam(config_dir, sp_xc_p.sid)}'
-                            + ('&abcm=10' if recent_only else '')
+                            + (f'&abcm={ABCM}' if recent_only else '')
                         )
                     XchinaParser.append_url_to_list(lists, model_url, paged_urls[1])
                 elif url_r.startswith('videos/'):
@@ -796,12 +797,14 @@ def real_main(argv):
     global THIS_CMD
     THIS_CMD = ' '.join(argv)
     global DOWNLOAD_COMMON_ARG
+    global ABCM
 
     conf_dir = os.path.abspath(os.environ.get('XCHINA2_CONF_DIR', './'))
     work_dir = os.path.abspath(os.environ.get('XCHINA2_DATA_DIR', './'))
     exe_scripts = os.environ.get('XCHINA2_EXE_SCRIPTS', '0')
     youtube_dl_config = os.environ.get('XCHINA_YOUTUBE_DL_CONFIG', None)
     proxy_setting = os.environ.get('XCHINA2_PROXY_SETTING', None)
+    abcm = os.environ.get('XCHINA2_ABCM', '5')
 
     if exe_scripts:
         if exe_scripts == '1' or exe_scripts.lower() == 'true' or exe_scripts.lower() == 'yes':
@@ -816,6 +819,7 @@ def real_main(argv):
     print(f'[=] exe_scripts: {"True" if exe_scripts else "False"}')
     print(f'[=] youtube-dl_config: {youtube_dl_config}')
     print(f'[=] proxy_setting: {proxy_setting}')
+    print(f'[=] abcm: {abcm}')
 
     if conf_dir:
         ConfigHandler.setRootDir(conf_dir)
@@ -826,6 +830,8 @@ def real_main(argv):
     if proxy_setting:
         DOWNLOAD_COMMON_ARG = DOWNLOAD_COMMON_ARG + f' --proxy {proxy_setting}'
 
+    if abcm:
+        ABCM = int(abcm)
 
     sps = None
     if len(argv) > 1:
